@@ -1,0 +1,29 @@
+schema_version = "1.0.0"
+
+id = "sculpt_join"
+version = "0.1.0"
+name = "Sculpt Join"
+tagline = "Join visible meshes to sculpt or pose them as one"
+maintainer = "Hervert Ferreira"
+website = "https://github.com/hervert-ferreira/sculpt-join"
+type = "add-on"
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+tags = ["Sculpt", "Object"]
+
+[build]
+# Only the add-on goes into the extension zip: the repository's
+# images, videos, docs and git files stay out.
+paths_exclude_pattern = [
+  "__pycache__/",
+  "/.git/",
+  "/.gitignore",
+  "/images/",
+  "/videos/",
+  "/README.md",
+  "/LICENSE",
+  "*.zip",
+]
