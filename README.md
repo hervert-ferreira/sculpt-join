@@ -15,7 +15,7 @@ A character is often many meshes: body, clothes, hair, accessories. Posing or re
 
 Sculpt Join gives you the joined mesh without the cost. It joins **copies** of your meshes into one temporary object. You pose and sculpt it as a single piece, and **Apply to Originals** writes only the new vertex positions back into each original mesh. Names, materials, UVs, modifiers (Multires included), Face Sets, parents and animation stay exactly as they were.
 
-<!-- VIDEO: example-join.mp4 -->
+https://github.com/user-attachments/assets/df84e363-fd92-4fb4-a56e-3d9159ffe012
 
 ## Features
 
@@ -47,7 +47,10 @@ If the joined mesh is deleted by accident, the panel offers **Restore Originals*
 
 By default every visible mesh is joined. Turn on **Selected Only** to join just the selected meshes plus the active one. Select the parts in the Outliner, or in Object Mode before entering Sculpt Mode.
 
-<!-- VIDEO: selected-only.mp4 -->
+
+https://github.com/user-attachments/assets/b6da409c-cdce-4267-8c78-80f23be0c078
+
+
 
 ## Options
 
@@ -77,7 +80,9 @@ A proxy is a light copy rebuilt with even voxel faces. You pose the proxy; on Ap
 - **Higher Face Limit:** closer to the originals, heavier brushes, longer join.
 - **Parts closer than a voxel fuse in the proxy** (for example, touching fingers) and move as one. Join that part alone with Selected Only, or raise the Face Limit.
 
-<!-- VIDEO: example-detail.mp4 -->
+https://github.com/user-attachments/assets/35521dd8-3c7e-4498-bf4f-eaf6677ca1df
+
+
 
 ## Best practices
 
