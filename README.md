@@ -79,16 +79,16 @@ A proxy is a light copy rebuilt with even voxel faces. You pose the proxy; on Ap
 - **Lower Face Limit:** lighter, faster brushes, coarser bends. Thin pieces may vanish from the proxy.
 - **Higher Face Limit:** closer to the originals, heavier brushes, longer join.
 - **Parts closer than a voxel fuse in the proxy** (for example, touching fingers) and move as one. Join that part alone with Selected Only, or raise the Face Limit.
-
-https://github.com/user-attachments/assets/35521dd8-3c7e-4498-bf4f-eaf6677ca1df
-
-
-
+  
 ## Best practices
 
 - **Use Multires on dense parts.** It is the cleanest way to pose: the part joins by its light base mesh and the sculpted levels follow the pose exactly. This only helps when the base mesh is light; a dense mesh without subdivision levels (a scan, an applied remesh) still needs a proxy.
 - **Pose with proxies, detail without them.** Use Dense Proxies for poses and big shapes, and turn it off for fine sculpting.
 - **New detail on a Multires part** sculpted while joined only carries the overall shape, since the part joins at its base level.
+  
+**Fine detail survives the pose.** In this example both the head and the cap have Multires. Each joins by its base mesh, and the brush reshapes both on the joined mesh. After Apply, the fine detail of both comes back: the scars and skin texture of the head, and the knit of the cap.
+
+https://github.com/user-attachments/assets/35521dd8-3c7e-4498-bf4f-eaf6677ca1df
 
 ## Posing tips
 
