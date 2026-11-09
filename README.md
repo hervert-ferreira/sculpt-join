@@ -30,7 +30,7 @@ https://github.com/user-attachments/assets/df84e363-fd92-4fb4-a56e-3d9159ffe012
 
 **From Blender** (recommended): open *Edit › Preferences › Get Extensions*, search for **Sculpt Join** and click *Install*.
 
-**From a file:** download `sculpt_join-0.1.0.zip` from the [Releases](https://github.com/hervert-ferreira/sculpt-join/releases) page, then in Blender use *Edit › Preferences › Get Extensions › ⌄ › Install from Disk*.
+**From a file:** download `sculpt_join-0.1.0.zip` from the [Releases](https://github.com/hervert-ferreira/sculpt-join/releases) page, then in Blender use *Edit › Preferences › Get Extensions*, open the menu in the top-right corner and choose *Install from Disk*.
 
 Requires Blender **4.2** or newer.
 
