@@ -13,7 +13,7 @@
 
 A character is often many meshes: body, clothes, hair, accessories. Posing or reshaping them together means joining them, which destroys the separate objects, their modifiers and their settings.
 
-Sculpt Join gives you the joined mesh without the cost. It joins **copies** of your meshes into one temporary object. You pose and sculpt it as a single piece, and **Apply to Originals** writes only the new vertex positions back into each original mesh. Names, materials, UVs, modifiers (Multires included), Face Sets, parents and animation stay exactly as they were.
+Sculpt Join gives you the joined mesh without the cost. It joins **copies** of your meshes into one temporary object. You pose and sculpt it as a single piece, and **Apply to Originals** writes only the new vertex positions back into each original mesh. Names, origins, materials, UVs, modifiers (Multires included), Face Sets, parents and animation stay exactly as they were.
 
 https://github.com/user-attachments/assets/df84e363-fd92-4fb4-a56e-3d9159ffe012
 
@@ -42,6 +42,9 @@ Requires Blender **4.2** or newer.
 4. Click **Apply to Originals** to send the result back, or **Cancel Join** to discard it.
 
 If the joined mesh is deleted by accident, the panel offers **Restore Originals** to bring the hidden meshes back.
+
+<img width="1920" height="1080" alt="what-happens" src="https://github.com/user-attachments/assets/53c78820-fc39-4109-9384-29eff670fb08" />
+
 
 ### Selected Only
 
