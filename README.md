@@ -43,7 +43,7 @@ Requires Blender **4.2** or newer.
 
 If the joined mesh is deleted by accident, the panel offers **Restore Originals** to bring the hidden meshes back.
 
-<img width="1920" height="1080" alt="what-happens" src="https://github.com/user-attachments/assets/53c78820-fc39-4109-9384-29eff670fb08" />
+![What happens to your meshes: the originals are hidden, their copies join into one mesh, and Apply writes the positions back](images/what-happens.png)
 
 
 ### Selected Only
