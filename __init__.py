@@ -65,6 +65,8 @@ import uuid
 
 import bpy
 
+from .translations import CONTEXT, TRANSLATIONS, iface_, report_
+
 DATA_KEY = "sculpt_join_data"   # custom property stored on the joined object
 BACKUP_KEY = "sculpt_join_backup"  # copy of that table on the scene (recovery)
 ORIGINAL_KEY = "sj_original"    # temporary tag on each original while joined
@@ -174,9 +176,10 @@ def _leave_mode(context):
         bpy.ops.object.mode_set(mode='OBJECT')
 
 
-def _meshes(count):
+def _meshes(count, translate=iface_):
     """'1 mesh' / '6 meshes'."""
-    return f"{count} mesh" if count == 1 else f"{count} meshes"
+    template = "{count} mesh" if count == 1 else "{count} meshes"
+    return translate(template).format(count=count)
 
 
 def _deselect_all(context):
@@ -473,10 +476,11 @@ def _join_problem(active, eligible, skipped):
     """(report level, message) if the join cannot happen at all, else None."""
     if active not in eligible:
         reason = dict(skipped).get(active.name, "not eligible")
-        return {'ERROR'}, f"The active mesh cannot be joined: {reason}."
+        return {'ERROR'}, report_("The active mesh cannot be joined: {reason}.").format(
+            reason=report_(reason))
     if len(eligible) < 2:
-        return {'WARNING'}, ("At least 2 meshes are needed. Check visibility "
-                             "and the selection.")
+        return {'WARNING'}, report_("At least 2 meshes are needed. Check visibility "
+                                    "and the selection.")
     return None
 
 
@@ -737,9 +741,9 @@ def _write_positions(joined, entries):
     count = len(mesh.vertices)
     ids_attr = mesh.attributes.get(VERTEX_ID_ATTRIBUTE)
     if ids_attr is None or count != sum(e["n"] for e in entries):
-        raise ValueError("the joined mesh changed (Dyntopo, remesh or deleted "
-                         "geometry). The join needs the same vertices: undo "
-                         "with Ctrl+Z, or Cancel Join")
+        raise ValueError(report_("the joined mesh changed (Dyntopo, remesh or deleted "
+                                 "geometry). The join needs the same vertices: undo "
+                                 "with Ctrl+Z, or Cancel Join"))
 
     coords = np.empty(count * 3, dtype='float32')
     mesh.vertices.foreach_get("co", coords)
@@ -753,34 +757,36 @@ def _write_positions(joined, entries):
     for entry, cost in zip(entries, work):
         orig = _find_original(entry)
         label = orig.name if orig is not None else entry["name"]
-        yield done / total, f"Applying {label}"
+        yield done / total, iface_("Applying {name}").format(name=label)
         expected = entry.get("dense_n", entry["n"])
         if orig is None:
-            problems.append(f"{label}: original missing (left as is)")
+            problems.append(report_("{name}: original missing (left as is)").format(name=label))
             continue
         if orig.type != 'MESH' or len(orig.data.vertices) != expected:
-            problems.append(f"{label}: original changed (left as is)")
+            problems.append(report_("{name}: original changed (left as is)").format(name=label))
             continue
         inverse = np.array(orig.matrix_world.inverted_safe())
         local = _positions_for(world, ids, entry["off"], entry["n"], inverse)
         if local is None:
-            problems.append(f"{label}: vertices missing (left as is)")
+            problems.append(report_("{name}: vertices missing (left as is)").format(name=label))
             continue
         if "rest" in entry:     # proxy: carry its pose to the dense original
             steps = _dense_positions(orig, entry, local.astype('float64'))
             try:
                 while True:
                     part = next(steps)
-                    yield (done + part * cost) / total, f"Carrying pose to {label}"
+                    yield ((done + part * cost) / total,
+                           iface_("Carrying pose to {name}").format(name=label))
             except StopIteration as stop:
                 local = stop.value
             if local is None:
-                problems.append(f"{label}: proxy rest shape missing (left as is)")
+                problems.append(report_("{name}: proxy rest shape missing (left as is)").format(
+                    name=label))
                 continue
         updates.append((orig, local))
         done += cost
 
-    yield 1.0, "Writing"
+    yield 1.0, iface_("Writing")
     for orig, local in updates:     # only after everything was checked
         orig.data.vertices.foreach_set("co", local.ravel())
         orig.data.update()
@@ -1365,9 +1371,9 @@ _PROGRESS = {}      # {"factor": 0..1, "text": str} while a Join/Apply is runnin
 def _fmt_time(seconds):
     """'4.2 s' below a minute, '1 min 05 s' from a minute on."""
     if seconds < 59.95:
-        return f"{seconds:.1f} s"
+        return report_("{seconds:.1f} s").format(seconds=seconds)
     minutes, rest = divmod(int(round(seconds)), 60)
-    return f"{minutes} min {rest:02d} s"
+    return report_("{minutes} min {seconds:02d} s").format(minutes=minutes, seconds=rest)
 
 
 def _redraw_views():
@@ -1433,8 +1439,8 @@ def _text(font, text, x, y, size, color, center=True):
 def _draw_warning(region, scale):
     """Red banner at the top of the viewport: the join can't be applied."""
     import gpu
-    lines = ("Sculpt Join: topology changed, this join can't be applied",
-             "Press Ctrl+Z to undo the remesh (or Cancel Join)")
+    lines = (iface_("Sculpt Join: topology changed, this join can't be applied"),
+             iface_("Press Ctrl+Z to undo the remesh (or Cancel Join)"))
     width, height = 470 * scale, 48 * scale
     x, y = (region.width - width) / 2, region.height - height - 60 * scale
     shader = gpu.shader.from_builtin('UNIFORM_COLOR')
@@ -1476,7 +1482,7 @@ def _draw_overlay():
     white, grey = (1, 1, 1, 1), (0.75, 0.75, 0.75, 1)
     _text(font, f"Sculpt Join: {_PROGRESS['text']}", cx, y + bar_h + 8 * scale, 13 * scale, white)
     _text(font, f"{int(_PROGRESS['factor'] * 100)}%", cx, y + 4 * scale, 11 * scale, white)
-    _text(font, "Esc to cancel", cx, box_bottom + 7 * scale, 11 * scale, grey)
+    _text(font, iface_("Esc to cancel"), cx, box_bottom + 7 * scale, 11 * scale, grey)
 
 
 class _Steps:
@@ -1500,7 +1506,7 @@ class _Steps:
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.01, window=context.window)
         wm.modal_handler_add(self)
-        _set_progress(0.0, "Starting")
+        _set_progress(0.0, iface_("Starting"))
         return {'RUNNING_MODAL'}
 
     def _stop(self, context):
@@ -1514,7 +1520,7 @@ class _Steps:
             if event.type == 'ESC' and event.value == 'PRESS':
                 self._steps.close()     # the generator rolls back (GeneratorExit)
                 self._stop(context)
-                self.report({'WARNING'}, self._cancel_message)
+                self.report({'WARNING'}, report_(self._cancel_message))
                 return {'CANCELLED'}
             if event.type != 'TIMER':
                 return {'RUNNING_MODAL'}    # block other input while working
@@ -1531,7 +1537,7 @@ class _Steps:
             except Exception:
                 pass
             self._stop(context)
-            self.report({'ERROR'}, f"Sculpt Join stopped: {exc}")
+            self.report({'ERROR'}, report_("Sculpt Join stopped: {error}").format(error=exc))
             return {'CANCELLED'}
 
     def cancel(self, context):          # e.g. the window was closed
@@ -1549,11 +1555,13 @@ class OBJECT_OT_sculpt_join_start(_Steps, bpy.types.Operator):
     """Join copies of all visible meshes into one mesh, to sculpt or pose them together. In Solid shading, the viewport color can be set to Single while joined"""
     bl_idname = "object.sculpt_join_start"
     bl_label = "Join Visible"
+    bl_translation_context = CONTEXT
     bl_options = {'UNDO'}
 
     selected_only: bpy.props.BoolProperty(
         name="Selected Only",
         description="Join only the selected meshes (plus the active one)",
+        translation_context=CONTEXT,
         default=False,
         options={'SKIP_SAVE', 'HIDDEN'},
     )
@@ -1563,6 +1571,7 @@ class OBJECT_OT_sculpt_join_start(_Steps, bpy.types.Operator):
                      "join. The originals only change once the join succeeded "
                      "(Esc leaves them untouched); then the Mirror is gone "
                      "(Ctrl+Z undoes it). Off: only the real half joins"),
+        translation_context=CONTEXT,
         default=False,
         options={'SKIP_SAVE'},
     )
@@ -1598,7 +1607,7 @@ class OBJECT_OT_sculpt_join_start(_Steps, bpy.types.Operator):
         if skipped or mirrors or deform:  # let the user decide instead of acting silently
             return context.window_manager.invoke_props_dialog(
                 self, width=420, title="Before Joining",
-                confirm_text="Join Remaining" if skipped else "Join")
+                confirm_text="Join Remaining" if skipped else "Join", text_ctxt=CONTEXT)
         return self.execute(context)
 
     def draw(self, context):
@@ -1610,39 +1619,46 @@ class OBJECT_OT_sculpt_join_start(_Steps, bpy.types.Operator):
         if deform:
             rigged = any(o.modifiers[n].type == 'ARMATURE'
                          for o in deform for n in _deform_modifiers(o))
-            layout.label(text=f"{_meshes(len(deform))} with deforming modifiers:", icon='INFO')
+            layout.label(text=iface_("{meshes} with deforming modifiers:").format(
+                meshes=_meshes(len(deform))), icon='INFO', translate=False)
             for obj in deform[:5]:
-                layout.label(text=f"{obj.name}: {', '.join(_deform_modifiers(obj))}")
+                layout.label(text=f"{obj.name}: {', '.join(_deform_modifiers(obj))}",
+                             translate=False)
             if len(deform) > 5:
-                layout.label(text=f"... and {len(deform) - 5} more")
-            layout.label(text="While joined they show their base shape"
-                              + (" (Armature: rest pose)." if rigged else "."))
-            layout.label(text="The modifiers stay and work again after Apply.")
+                layout.label(text=iface_("... and {count} more").format(count=len(deform) - 5),
+                             translate=False)
+            layout.label(text=("While joined they show their base shape (Armature: rest pose)."
+                               if rigged else "While joined they show their base shape."),
+                         text_ctxt=CONTEXT)
+            layout.label(text="The modifiers stay and work again after Apply.", text_ctxt=CONTEXT)
             layout.prop(context.scene, "sculpt_join_warn_deform",
-                        text="Keep warning about deforming modifiers")
+                        text="Keep warning about deforming modifiers", text_ctxt=CONTEXT)
             if skipped or mirrors:
                 layout.separator()
 
         if skipped:
-            layout.label(text="These meshes stay untouched in the scene:")
+            layout.label(text="These meshes stay untouched in the scene:", text_ctxt=CONTEXT)
             for name, reason in skipped[:10]:
-                layout.label(text=f"{name}: {reason}")
+                layout.label(text=f"{name}: {iface_(reason)}", translate=False)
             if len(skipped) > 10:
-                layout.label(text=f"... and {len(skipped) - 10} more")
+                layout.label(text=iface_("... and {count} more").format(count=len(skipped) - 10),
+                             translate=False)
         if mirrors:
             if skipped:
                 layout.separator()
-            layout.label(text=f"{_meshes(len(mirrors))} with Mirror modifiers:")
+            layout.label(text=iface_("{meshes} with Mirror modifiers:").format(
+                meshes=_meshes(len(mirrors))), translate=False)
             for obj in mirrors[:5]:
                 if _mirror_after_others(obj):
-                    layout.label(text=f"{obj.name} (Mirror not first: the result can differ)",
-                                 icon='ERROR')
+                    layout.label(text=iface_("{name} (Mirror not first: the result can differ)")
+                                 .format(name=obj.name), icon='ERROR', translate=False)
                 else:
-                    layout.label(text=obj.name)
+                    layout.label(text=obj.name, translate=False)
             if len(mirrors) > 5:
-                layout.label(text=f"... and {len(mirrors) - 5} more")
+                layout.label(text=iface_("... and {count} more").format(count=len(mirrors) - 5),
+                             translate=False)
             layout.prop(self, "apply_mirror")
-            layout.label(text="Off: only the real half of each mesh is joined.")
+            layout.label(text="Off: only the real half of each mesh is joined.", text_ctxt=CONTEXT)
 
     _cancel_message = "Join cancelled (Esc). Nothing was changed."
 
@@ -1663,6 +1679,7 @@ class OBJECT_OT_sculpt_join_start(_Steps, bpy.types.Operator):
 
         bpy.ops.object.mode_set(mode='OBJECT')
         mirror_note = ""
+        mirror_problems = []
         # Apply Mirror: the copies are made from the mirrored shape; the
         # originals only get it at the end, once the join has succeeded.
         mirrored = {}
@@ -1692,7 +1709,7 @@ class OBJECT_OT_sculpt_join_start(_Steps, bpy.types.Operator):
             if self.apply_mirror:
                 for obj in eligible:
                     if _mirror_modifiers(obj):
-                        yield 0.0, f"Mirroring {obj.name}"
+                        yield 0.0, iface_("Mirroring {name}").format(name=obj.name)
                         mirrored[obj.name] = _mirrored_mesh(context, obj)
             plan = (_plan_proxies(eligible, settings.sculpt_join_budget, mesh_of)
                     if settings.sculpt_join_proxies else {})
@@ -1704,15 +1721,16 @@ class OBJECT_OT_sculpt_join_start(_Steps, bpy.types.Operator):
                 face_set = index + 1 if face_sets == 'MESH' else None
                 rest = None
                 proxy_mesh = None
-                yield (0.9 * done_cost / total_cost,
-                       f"Proxy for {obj.name}" if obj.name in plan else f"Copying {obj.name}")
+                progress_text = "Proxy for {name}" if obj.name in plan else "Copying {name}"
+                yield 0.9 * done_cost / total_cost, iface_(progress_text).format(name=obj.name)
                 done_cost += cost[index]
                 if obj.name in plan:
                     t_proxy = time.perf_counter()
                     proxy_mesh, method = _build_proxy_mesh(context, mesh_of(obj),
                                                            plan[obj.name])
                     if proxy_mesh is None:
-                        proxy_notes.append(f"{obj.name}: no proxy, joined at full resolution")
+                        proxy_notes.append(report_("{name}: no proxy, joined at full resolution")
+                                           .format(name=obj.name))
                     else:
                         print(f"[Sculpt Join] proxy {obj.name}: {_face_count(mesh_of(obj)):,} -> "
                               f"{_face_count(proxy_mesh):,} faces ({method}, "
@@ -1747,7 +1765,7 @@ class OBJECT_OT_sculpt_join_start(_Steps, bpy.types.Operator):
                 if obj == active:
                     copy_active = copy
             t_copies = time.perf_counter()
-            yield 0.9, "Joining"
+            yield 0.9, iface_("Joining")
 
             _deselect_all(context)
             for copy in copies:
@@ -1765,7 +1783,7 @@ class OBJECT_OT_sculpt_join_start(_Steps, bpy.types.Operator):
             bpy.ops.object.mode_set(mode='SCULPT')
             if not isinstance(exc, Exception):
                 raise                   # Esc / closed: the runner reports it
-            self.report({'ERROR'}, f"Join failed: {exc}")
+            self.report({'ERROR'}, report_("Join failed: {error}").format(error=exc))
             return {'CANCELLED'}
 
         joined = context.view_layer.objects.active
@@ -1789,13 +1807,13 @@ class OBJECT_OT_sculpt_join_start(_Steps, bpy.types.Operator):
             context.view_layer.objects.active = active
             active.select_set(True)
             bpy.ops.object.mode_set(mode='SCULPT')
-            self.report({'ERROR'}, "Join failed: the join did not keep the vertex "
-                                   "ids, so it could not be applied later.")
+            self.report({'ERROR'}, report_("Join failed: the join did not keep the vertex "
+                                           "ids, so it could not be applied later."))
             return {'CANCELLED'}
 
         # The join is good: only now does Apply Mirror change the originals.
         if mirrored:
-            changed, mirror_problems = 0, []
+            changed = 0
             for obj in eligible:
                 mesh = mirrored.get(obj.name)
                 if mesh is None:
@@ -1804,11 +1822,13 @@ class OBJECT_OT_sculpt_join_start(_Steps, bpy.types.Operator):
                     _commit_mirror(obj, mesh)
                     changed += 1
                 except (RuntimeError, ValueError, TypeError) as exc:
-                    mirror_problems.append(f"{obj.name}: Mirror not applied ({exc}), "
-                                           f"its sculpt will not apply")
+                    mirror_problems.append(report_("{name}: Mirror not applied ({error}), "
+                                                   "its sculpt will not apply").format(
+                                                       name=obj.name, error=exc))
             _drop_copies([], list(mirrored.values()))
             if changed:
-                mirror_note = f" Mirror applied on {_meshes(changed)}."
+                mirror_note = " " + report_("Mirror applied on {meshes}.").format(
+                    meshes=_meshes(changed, report_))
             if mirror_problems:
                 mirror_note += " " + "; ".join(mirror_problems) + "."
 
@@ -1820,7 +1840,7 @@ class OBJECT_OT_sculpt_join_start(_Steps, bpy.types.Operator):
         face_note = ""
         if face_sets == 'MESH' and not _face_sets_per_mesh_ok(joined, faces_expected):
             face_sets = 'PARTS'
-            face_note = " Per Mesh Face Sets were not available; loose parts were used."
+            face_note = " " + report_("Per Mesh Face Sets were not available; loose parts were used.")
 
         # Single viewport color: the joined object looks like it has one
         # material. The real materials stay untouched.
@@ -1859,28 +1879,30 @@ class OBJECT_OT_sculpt_join_start(_Steps, bpy.types.Operator):
             # Without the interface this sculpt operator crashes Blender
             # (seen in 4.2, 5.0 and 5.2), so it only runs with a window.
             if bpy.app.background or context.window is None:
-                face_note = " Face Sets per loose part need the interface; none were created."
+                face_note = " " + report_("Face Sets per loose part need the interface; none were created.")
             else:
                 try:
                     bpy.ops.sculpt.face_sets_init(mode='LOOSE_PARTS')
                 except RuntimeError:
-                    face_note = " Face Sets could not be created."
+                    face_note = " " + report_("Face Sets could not be created.")
 
         elapsed = time.perf_counter() - started
         print(f"[Sculpt Join] join: copies "
               f"{t_copies - started:.2f} s, join {t_joined - t_copies:.2f} s, "
               f"total {elapsed:.2f} s")
-        message = f"{_meshes(len(eligible))} joined ({_fmt_time(elapsed)})."
+        message = report_("{meshes} joined ({time}).").format(
+            meshes=_meshes(len(eligible), report_), time=_fmt_time(elapsed))
         if skipped:
-            message += f" {_meshes(len(skipped))} left untouched."
+            message += " " + report_("{meshes} left untouched.").format(
+                meshes=_meshes(len(skipped), report_))
         if proxied:
-            message += (f" {_meshes(len(proxied))} posed through light proxies "
-                        f"({len(joined.data.polygons):,} faces joined).")
+            message += " " + report_("{meshes} posed through light proxies "
+                                     "({faces:,} faces joined).").format(
+                meshes=_meshes(len(proxied), report_), faces=len(joined.data.polygons))
         if proxy_notes:
             message += " " + "; ".join(proxy_notes) + "."
         message += mirror_note + face_note
-        level = {'WARNING'} if (skipped or face_note or proxy_notes
-                                or "not applied" in mirror_note) else {'INFO'}
+        level = {'WARNING'} if (skipped or face_note or proxy_notes or mirror_problems) else {'INFO'}
         self.report(level, message)
         return {'FINISHED'}
 
@@ -1889,6 +1911,7 @@ class OBJECT_OT_sculpt_join_apply(_Steps, bpy.types.Operator):
     """Write the new vertex positions back to each original mesh. Everything else in the originals is kept"""
     bl_idname = "object.sculpt_join_apply"
     bl_label = "Apply to Originals"
+    bl_translation_context = CONTEXT
     bl_options = {'REGISTER', 'UNDO'}
     _cancel_message = "Apply cancelled (Esc). The join is still there."
 
@@ -1916,18 +1939,17 @@ class OBJECT_OT_sculpt_join_apply(_Steps, bpy.types.Operator):
                     pass
             if not isinstance(exc, Exception):
                 raise                   # Esc / closed: the runner reports it
-            self.report({'ERROR'}, f"Apply failed: {exc}")
+            self.report({'ERROR'}, report_("Apply failed: {error}").format(error=exc))
             return {'CANCELLED'}
 
         _discard_joined(context, joined, info, sculpt)
         elapsed = time.perf_counter() - started
         print(f"[Sculpt Join] apply: total {elapsed:.2f} s")
+        message = report_("{meshes} updated ({time}).").format(
+            meshes=_meshes(restored, report_), time=_fmt_time(elapsed))
         if problems:
-            self.report({'WARNING'},
-                        f"{_meshes(restored)} updated ({_fmt_time(elapsed)}). Issues: "
-                        + "; ".join(problems))
-        else:
-            self.report({'INFO'}, f"{_meshes(restored)} updated ({_fmt_time(elapsed)}).")
+            message += " " + report_("Issues: {details}").format(details="; ".join(problems))
+        self.report({'WARNING'} if problems else {'INFO'}, message)
         return {'FINISHED'}
 
 
@@ -1935,6 +1957,7 @@ class OBJECT_OT_sculpt_join_cancel(bpy.types.Operator):
     """Discard the joined mesh and show the original meshes again, without applying the sculpt"""
     bl_idname = "object.sculpt_join_cancel"
     bl_label = "Cancel Join"
+    bl_translation_context = CONTEXT
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -1949,10 +1972,11 @@ class OBJECT_OT_sculpt_join_cancel(bpy.types.Operator):
         _discard_joined(context, joined, info, sculpt, restore_selection=True)
         applied = info["mirror_applied"]
         if applied:
-            self.report({'WARNING'}, f"Join cancelled. Original meshes restored; the Mirror "
-                        f"stays applied on {_meshes(len(applied))} (Ctrl+Z to undo it).")
+            self.report({'WARNING'}, report_("Join cancelled. Original meshes restored; the Mirror "
+                                             "stays applied on {meshes} (Ctrl+Z to undo it).").format(
+                                                 meshes=_meshes(len(applied), report_)))
         else:
-            self.report({'INFO'}, "Join cancelled. Original meshes restored.")
+            self.report({'INFO'}, report_("Join cancelled. Original meshes restored."))
         return {'FINISHED'}
 
 
@@ -1960,6 +1984,7 @@ class OBJECT_OT_sculpt_join_focus(bpy.types.Operator):
     """Go back to the joined mesh, in Sculpt Mode (e.g. after Transfer Sculpt Mode to another mesh, or after leaving Sculpt Mode)"""
     bl_idname = "object.sculpt_join_focus"
     bl_label = "Back to Join"
+    bl_translation_context = CONTEXT
     bl_options = {'UNDO'}
 
     @classmethod
@@ -1974,7 +1999,7 @@ class OBJECT_OT_sculpt_join_focus(bpy.types.Operator):
             _focus(context, joined)
             bpy.ops.object.mode_set(mode='SCULPT')
         except RuntimeError as exc:
-            self.report({'ERROR'}, f"Could not go back to the join: {exc}")
+            self.report({'ERROR'}, report_("Could not go back to the join: {error}").format(error=exc))
             return {'CANCELLED'}
         return {'FINISHED'}
 
@@ -1983,6 +2008,7 @@ class OBJECT_OT_sculpt_join_recover(bpy.types.Operator):
     """The joined mesh was deleted: show the hidden original meshes again and clean up. Whatever was sculpted on the joined mesh is lost (Ctrl+Z may bring the joined mesh back instead)"""
     bl_idname = "object.sculpt_join_recover"
     bl_label = "Restore Originals"
+    bl_translation_context = CONTEXT
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -2011,9 +2037,9 @@ class OBJECT_OT_sculpt_join_recover(bpy.types.Operator):
         _restore_view(context, info)
         _clear_backup()
         missing = len(info["entries"]) - len(shown)
-        message = f"{_meshes(len(shown))} shown again."
+        message = report_("{meshes} shown again.").format(meshes=_meshes(len(shown), report_))
         if missing:
-            message += f" {_meshes(missing)} not found."
+            message += " " + report_("{meshes} not found.").format(meshes=_meshes(missing, report_))
         self.report({'WARNING'} if missing else {'INFO'}, message)
         return {'FINISHED'}
 
@@ -2117,22 +2143,24 @@ class OBJECT_PT_sculpt_join(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         if _busy():
-            layout.label(text=f"Working: {_PROGRESS.get('text', '')}")
-            layout.label(text="Press Esc to cancel")
+            layout.label(text=iface_("Working: {step}").format(step=_PROGRESS.get('text', '')),
+                         translate=False)
+            layout.label(text="Press Esc to cancel", text_ctxt=CONTEXT)
             return
         joined = _joined_fast()
         if joined is not None:
             info = _get_info(joined)
-            layout.label(text=f"Join in progress ({_meshes(len(info['entries']))})")
+            layout.label(text=iface_("Join in progress ({meshes})").format(
+                meshes=_meshes(len(info['entries']))), translate=False)
             if _topology_changed(joined, info):
                 box = layout.box()
                 box.alert = True
-                box.label(text="Topology changed: this join", icon='ERROR')
-                box.label(text="can't be applied. Ctrl+Z to undo.")
+                box.label(text="Topology changed: this join", text_ctxt=CONTEXT, icon='ERROR')
+                box.label(text="can't be applied. Ctrl+Z to undo.", text_ctxt=CONTEXT)
             if _GUARD["dyntopo_note"]:
-                layout.label(text=_GUARD["dyntopo_note"], icon='INFO')
+                layout.label(text=_GUARD["dyntopo_note"], text_ctxt=CONTEXT, icon='INFO')
             if context.mode != 'SCULPT':
-                layout.label(text="Outside Sculpt Mode", icon='INFO')
+                layout.label(text="Outside Sculpt Mode", text_ctxt=CONTEXT, icon='INFO')
             if context.mode != 'SCULPT' or context.active_object != joined:
                 layout.operator(OBJECT_OT_sculpt_join_focus.bl_idname)
             layout.operator(OBJECT_OT_sculpt_join_apply.bl_idname)
@@ -2143,9 +2171,10 @@ class OBJECT_PT_sculpt_join(bpy.types.Panel):
         if lost is not None:
             box = layout.box()
             box.alert = True
-            box.label(text="The joined mesh is gone", icon='ERROR')
-            box.label(text=f"{_meshes(len(lost['entries']))} still hidden.")
-            box.label(text="Ctrl+Z may bring it back, or:")
+            box.label(text="The joined mesh is gone", text_ctxt=CONTEXT, icon='ERROR')
+            box.label(text=iface_("{meshes} still hidden.").format(
+                meshes=_meshes(len(lost['entries']))), translate=False)
+            box.label(text="Ctrl+Z may bring it back, or:", text_ctxt=CONTEXT)
             layout.operator(OBJECT_OT_sculpt_join_recover.bl_idname, icon='HIDE_OFF')
             return
 
@@ -2155,8 +2184,8 @@ class OBJECT_PT_sculpt_join(bpy.types.Panel):
 
         settings = context.scene    # saved with the .blend file
         col = layout.column(align=True)
-        col.label(text="Pose and sculpt the parts as one.")
-        col.label(text="Don't use Dyntopo or Remesh while joined.")
+        col.label(text="Pose and sculpt the parts as one.", text_ctxt=CONTEXT)
+        col.label(text="Don't use Dyntopo or Remesh while joined.", text_ctxt=CONTEXT)
 
         selected_only = settings.sculpt_join_selected_only
         visible, skipped = _collect_eligible(context)
@@ -2170,9 +2199,9 @@ class OBJECT_PT_sculpt_join(bpy.types.Panel):
             body.prop(settings, "sculpt_join_proxies")
             sub = body.row()
             sub.active = settings.sculpt_join_proxies
-            sub.prop(settings, "sculpt_join_budget", text="Face Limit")
+            sub.prop(settings, "sculpt_join_budget")
             if settings.sculpt_join_proxies:
-                body.label(text="For fine detail, turn Dense Proxies off")
+                body.label(text="For fine detail, turn Dense Proxies off", text_ctxt=CONTEXT)
             body.prop(settings, "sculpt_join_face_sets")
             body.prop(settings, "sculpt_join_single_color")
             body.prop(settings, "sculpt_join_warn_deform")
@@ -2180,22 +2209,25 @@ class OBJECT_PT_sculpt_join(bpy.types.Panel):
         # 3) Join
         reason = _skip_reason(context.object)
         if reason:      # blocks the join: say it here
-            layout.label(text=f"Active mesh: {reason}", icon='ERROR')
+            layout.label(text=iface_("Active mesh: {reason}").format(reason=iface_(reason)),
+                         icon='ERROR', translate=False)
         notes = (len(target_skipped)
                  + sum(1 for o in targets if _mirror_modifiers(o))
                  + len(_deform_note_objects(context, targets)))
         if notes and not reason:
-            layout.label(text=f"{notes} note{'s' if notes > 1 else ''} to review on Join",
-                         icon='INFO')
+            template = ("{count} note to review on Join" if notes == 1
+                        else "{count} notes to review on Join")
+            layout.label(text=iface_(template).format(count=notes), icon='INFO', translate=False)
         layout.prop(settings, "sculpt_join_selected_only")
         row = layout.row()
         row.scale_y = 1.4
         row.enabled = len(targets) >= 2
         op = row.operator(OBJECT_OT_sculpt_join_start.bl_idname,
-                          text=f"Join ({_meshes(len(targets))})")
+                          text=iface_("Join ({meshes})").format(meshes=_meshes(len(targets))),
+                          translate=False)
         op.selected_only = selected_only
         if selected_only and len(targets) < 2:
-            layout.label(text="Select 2+ parts (Outliner or Object Mode)")
+            layout.label(text="Select 2+ parts (Outliner or Object Mode)", text_ctxt=CONTEXT)
 
 
 # ---------------------------------------------------------------------------
@@ -2213,6 +2245,7 @@ CLASSES = (
 
 
 def register():
+    bpy.app.translations.register(__name__, TRANSLATIONS)
     bpy.types.Scene.sculpt_join_proxies = bpy.props.BoolProperty(
         name="Dense Proxies",
         description=("When the scene has more faces than the Face Limit, "
@@ -2221,6 +2254,7 @@ def register():
                      "vertex of the dense originals, details included. Good for "
                      "posing and big shape changes; fine detail sculpted on a "
                      "proxy is not carried exactly: turn this off for fine detail"),
+        translation_context=CONTEXT,
         default=True,
     )
     bpy.types.Scene.sculpt_join_budget = bpy.props.IntProperty(
@@ -2230,6 +2264,7 @@ def register():
                      "area; only meshes denser than their share get a proxy. "
                      "Higher: proxies closer to the originals, heavier brushes. "
                      "Lower: lighter and faster, coarser bends"),
+        translation_context=CONTEXT,
         default=500_000, min=20_000, soft_max=3_000_000, step=50_000,
     )
     bpy.types.Scene.sculpt_join_selected_only = bpy.props.BoolProperty(
@@ -2237,6 +2272,7 @@ def register():
         description=("Join only the selected meshes (plus the active one). Select "
                      "the parts in the Outliner, or in Object Mode before entering "
                      "Sculpt Mode. Off: all visible meshes are joined"),
+        translation_context=CONTEXT,
         default=False,
     )
     bpy.types.Scene.sculpt_join_single_color = bpy.props.BoolProperty(
@@ -2245,6 +2281,7 @@ def register():
                      "joined, so the joined mesh looks like it has one material. "
                      "The real materials are not changed; the previous color "
                      "is restored afterwards"),
+        translation_context=CONTEXT,
         default=True,
     )
     bpy.types.Scene.sculpt_join_warn_deform = bpy.props.BoolProperty(
@@ -2253,12 +2290,14 @@ def register():
                      "(Armature, Lattice, Shrinkwrap...). While joined they show "
                      "their base shape (Armature: rest pose); the modifiers stay "
                      "on the originals and work again after Apply"),
+        translation_context=CONTEXT,
         default=True,
     )
     bpy.types.Scene.sculpt_join_face_sets = bpy.props.EnumProperty(
         name="Face Sets",
         description=("Create Face Sets when joining, so parts can be masked, "
                      "hidden or posed as segments. Overwrites existing Face Sets"),
+        translation_context=CONTEXT,
         items=[
             ('NONE', "None", "Do not create Face Sets"),
             ('MESH', "Per Mesh", "One Face Set for each joined mesh"),
@@ -2295,4 +2334,5 @@ def unregister():
     del bpy.types.Scene.sculpt_join_budget
     del bpy.types.Scene.sculpt_join_proxies
     del bpy.types.Scene.sculpt_join_single_color
+    bpy.app.translations.unregister(__name__)
 
